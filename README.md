@@ -25,6 +25,7 @@ make venv-system
 - `./run --help` to see implemented flags
 - `./run --group` to sum resources of processes with the same name
 - `./run --group --pid <pid> --memtype rss` to see which libs of this process eating more RAM
+- `./forest [--with_libs]` for maximum details in CLI
 
 # Extra
 
