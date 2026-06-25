@@ -42,9 +42,7 @@ if __name__ == "__main__":
         """Display process tree with memory/CPU usage"""
 
         total_private = 0
-        total_shared = 0
         total_pss = 0
-        total_rss = 0
 
         try:
             info = proc.as_dict(
@@ -60,9 +58,7 @@ if __name__ == "__main__":
             pss = getattr(mem_info, "pss", 0) if mem_info is not None else 0
             rss = getattr(mem_info, "rss", 0) if mem_info is not None else 0
             total_private = priv
-            total_shared = shared
             total_pss = pss
-            total_rss = rss
             mmaps = info["memory_maps"]
 
             s = "┑" if mmaps is not None and len(mmaps) else "╸"
@@ -84,12 +80,12 @@ if __name__ == "__main__":
                         mmaps_private += mpriv
                         if mmap.path == exe:
                             mmaps_shared += mshared
-                            if mmap.path not in exes:
-                                exes[mmap.path] = mmap
+                            # if mmap.path not in exes or mshared > (exes[mmap.path].shared_clean + exes[mmap.path].shared_dirty):
+                            exes[mmap.path] = mmap
                         else:
                             libs_shared += mshared
-                            if mmap.path not in libs:
-                                libs[mmap.path] = mmap
+                            # if mmap.path not in libs or mshared > (libs[mmap.path].shared_clean + libs[mmap.path].shared_dirty):
+                            libs[mmap.path] = mmap
                     else:
                         mmaps_shared += mshared
                 print(
@@ -100,22 +96,20 @@ if __name__ == "__main__":
             if len(children):
                 print(f"{'  ' * indent}└─┐")
                 for child in children:
-                    children_private, children_shared, children_pss, children_rss = (
+                    children_private, children_pss = (
                         print_process_tree(child, indent + 1)
                     )
                     total_private += children_private
-                    total_shared = children_shared
-                    total_pss = children_pss
-                    total_rss = children_rss
+                    total_pss += children_pss
                 print(
-                    f"{'  ' * indent}┌─┘ Total {name}: {h(total_private)}, {h(total_shared)}, {h(total_pss)}, {h(total_rss)}"
+                    f"{'  ' * indent}┌─┘ Total {name}: {h(total_private)}, -, {h(total_pss)}, -"
                 )
 
         except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError) as e:
             print(e)
             pass
 
-        return total_private, total_shared, total_pss, total_rss
+        return total_private, total_pss
 
     print("Private, Shared, PSS, RSS")
     print("┌───────────")
@@ -124,32 +118,31 @@ if __name__ == "__main__":
     ):
         if not proc.info["ppid"]:
             print_process_tree(proc)
-        # elif proc.info["ppid"] == 1:
-        #     print("Root child: ", proc, proc.info)
-        # else:
-        #     print("Unknown: ", proc, proc.info)
-    # proc = psutil.Process(1)
-    # print_process_tree(proc)
-
-    order_by = "size"
 
     print("├───────────")
+    print(f"│ │   Shared, Disk")
     libs = list(libs.values())
-    libs.sort(key=lambda mmap: getattr(mmap, order_by), reverse=True)
-    libs_size = 0
+    libs.sort(key=lambda mmap: mmap.shared_clean + mmap.shared_dirty, reverse=True)
+    libs_disk = 0
+    libs_shared = 0
     for mmap in libs:
-        libs_size += mmap.size
-        print(f"│ │   {mmap.path} ({h(mmap.size)})")
-    print(f"│ Total libs size: {h(libs_size)}")
+        mshared = mmap.shared_clean + mmap.shared_dirty
+        libs_disk += mmap.size
+        libs_shared += mshared
+        print(f"│ │   {mmap.path} ({h(mshared)}, {h(mmap.size)})")
+    print(f"│ Total libs shared/disk: {h(libs_shared)}/{h(libs_disk)}")
     print("├───────────")
 
     exes = list(exes.values())
-    exes.sort(key=lambda mmap: getattr(mmap, order_by), reverse=True)
-    exes_size = 0
+    exes.sort(key=lambda mmap: mmap.shared_clean + mmap.shared_dirty, reverse=True)
+    exes_disk = 0
+    exes_shared = 0
     for mmap in exes:
-        exes_size += mmap.size
-        print(f"│ │   {mmap.path} ({h(mmap.size)})")
-    print(f"│ Total exes size: {h(exes_size)}")
+        mshared = mmap.shared_clean + mmap.shared_dirty
+        exes_disk += mmap.size
+        exes_shared += mshared
+        print(f"│ │   {mmap.path} ({h(mshared)}, {h(mmap.size)})")
+    print(f"│ Total exes shared/disk: {h(exes_shared)}/{h(exes_disk)}")
     print("└───────────")
 
     mem = psutil.virtual_memory()
